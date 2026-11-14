@@ -6,12 +6,21 @@ const app = express();
 app.use(cors());
 
 app.get('/', (req, res) => {
+  // Calcula a data de hoje e de daqui a 3 dias para garantir que sempre tenha jogos na lista
+  const hoje = new Date();
+  const futuro = new Date();
+  futuro.setDate(hoje.getDate() + 3);
+
+  const dateFrom = hoje.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const dateTo = futuro.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+
   const options = {
-    hostname: 'v3.football.api-sports.io',
-    path: '/fixtures?live=all',
+    hostname: 'api.football-data.org',
+    path: `/v4/matches?competitions=PL,ELC,BL1,SA,PD,FL1,DED,PPL,BSA,CL,EC,WC&dateFrom=${dateFrom}&dateTo=${dateTo}`,
     method: 'GET',
     headers: {
-      'x-apisports-key': '00397071439f1c71b5eeeccab11ffb0c',
+      'X-Auth-Token': 'cbbe39e454b54abb988f1cd41778bbd0',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FootballProxy/1.0',
       'Accept': 'application/json'
     }
   };
@@ -24,30 +33,38 @@ app.get('/', (req, res) => {
     apiRes.on('end', () => {
       try {
         const json = JSON.parse(data);
-        const lista = json.response || [];
+        const lista = json.matches || [];
 
-        // Se houver jogos ao vivo, formata e entrega para o app
-        if (lista.length > 0) {
-          const jogosFormatados = lista.map((item) => ({
-            time1: item.teams.home.name,
-            time2: item.teams.away.name,
-            escudo1: item.teams.home.logo,
-            escudo2: item.teams.away.logo,
-            horario: "AO VIVO",
-            campeonato: item.league.name,
-            placar: `${item.goals.home ?? 0} - ${item.goals.away ?? 0}`,
-            status: item.fixture.status.short,
+        // Traduz para o formato exato que o seu aplicativo entende
+        const jogosFormatados = lista.map((item) => {
+          const dataJogo = new Date(item.utcDate);
+          const horario = dataJogo.toLocaleTimeString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+
+          const golsCasa = item.score?.fullTime?.home;
+          const golsFora = item.score?.fullTime?.away;
+          const placar = (golsCasa !== null && golsFora !== null) ? `${golsCasa} - ${golsFora}` : '';
+
+          return {
+            time1: item.homeTeam.shortName || item.homeTeam.name,
+            time2: item.awayTeam.shortName || item.awayTeam.name,
+            escudo1: item.homeTeam.crest,
+            escudo2: item.awayTeam.crest,
+            horario: horario,
+            campeonato: item.competition.name,
+            placar: placar,
+            status: item.status,
             canal: ""
-          }));
-          res.setHeader('Content-Type', 'application/json');
-          return res.status(200).json(jogosFormatados);
-        }
+          };
+        });
 
-        // Se vier vazio, mostra o motivo exato retornado pela API-Football
         res.setHeader('Content-Type', 'application/json');
-        res.status(200).json(json);
+        res.status(200).json(jogosFormatados);
       } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ error: "Erro ao processar resposta", detalhe: e.message });
       }
     });
   });
