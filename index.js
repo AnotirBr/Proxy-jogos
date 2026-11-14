@@ -5,6 +5,19 @@ const app = express();
 
 app.use(cors());
 
+// IDs oficiais na API-Football (v3) para os campeonatos escolhidos:
+const LIGAS_PERMITIDAS = [
+  13,  // CONMEBOL Libertadores
+  11,  // CONMEBOL Sul-Americana
+  73,  // Copa do Brasil
+  2,   // UEFA Champions League
+  39,  // Premier League (Inglaterra)
+  140, // La Liga (Espanhol)
+  135, // Serie A (Italiano)
+  // Seleções (Copa do Mundo, Eliminatórias, Liga das Nações, Copa América, Euro e Amistosos):
+  1, 4, 5, 9, 10, 29, 30, 31, 32, 33, 34, 37
+];
+
 app.get('/', (req, res) => {
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
@@ -28,8 +41,13 @@ app.get('/', (req, res) => {
         const json = JSON.parse(data);
         const lista = json.response || [];
 
-        // Transforma os dados da API para o formato limpo que o aplicativo entende
-        const jogosFormatados = lista.map((item) => {
+        // Filtra apenas os campeonatos da lista permitida
+        const jogosFiltrados = lista.filter((item) =>
+          LIGAS_PERMITIDAS.includes(item.league.id)
+        );
+
+        // Formata os campos para o padrão do seu aplicativo
+        const jogosFormatados = jogosFiltrados.map((item) => {
           const dataJogo = new Date(item.fixture.date);
           const horario = dataJogo.toLocaleTimeString('pt-BR', {
             timeZone: 'America/Sao_Paulo',
