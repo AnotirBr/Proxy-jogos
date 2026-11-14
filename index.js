@@ -5,54 +5,10 @@ const app = express();
 
 app.use(cors());
 
-// IDs oficiais na API-Football (v3):
-const LIGAS_PRIORITARIAS = [
-  13,  // CONMEBOL Libertadores
-  11,  // CONMEBOL Sul-Americana
-  73,  // Copa do Brasil
-  71,  // Brasileirão Série A
-  2,   // UEFA Champions League
-  3,   // UEFA Europa League
-  39,  // Premier League (Inglaterra)
-  140, // La Liga (Espanhol)
-  135, // Serie A (Italiano)
-  // Seleções (Copa do Mundo, Euro, Nations League, Copa América, Amistosos e Eliminatórias):
-  1, 4, 5, 9, 10, 29, 30, 31, 32, 33, 34, 37, 960
-];
-
-function formatarJogos(lista) {
-  return lista.map((item) => {
-    const dataJogo = new Date(item.fixture.date);
-    const horario = dataJogo.toLocaleTimeString('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    const golsCasa = item.goals.home !== null ? item.goals.home : '';
-    const golsFora = item.goals.away !== null ? item.goals.away : '';
-    const placar = (golsCasa !== '' && golsFora !== '') ? `${golsCasa} - ${golsFora}` : '';
-
-    return {
-      time1: item.teams.home.name,
-      time2: item.teams.away.name,
-      escudo1: item.teams.home.logo,
-      escudo2: item.teams.away.logo,
-      horario: horario,
-      campeonato: item.league.name,
-      placar: placar,
-      status: item.fixture.status.short,
-      canal: ""
-    };
-  });
-}
-
 app.get('/', (req, res) => {
-  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-
   const options = {
     hostname: 'v3.football.api-sports.io',
-    path: `/fixtures?date=${hoje}&timezone=America/Sao_Paulo`,
+    path: '/fixtures?live=all',
     method: 'GET',
     headers: {
       'x-apisports-key': '00397071439f1c71b5eeeccab11ffb0c',
@@ -70,19 +26,28 @@ app.get('/', (req, res) => {
         const json = JSON.parse(data);
         const lista = json.response || [];
 
-        // 1. Tenta filtrar apenas os seus campeonatos escolhidos
-        const jogosFiltrados = lista.filter((item) =>
-          LIGAS_PRIORITARIAS.includes(item.league.id)
-        );
+        // Se houver jogos ao vivo, formata e entrega para o app
+        if (lista.length > 0) {
+          const jogosFormatados = lista.map((item) => ({
+            time1: item.teams.home.name,
+            time2: item.teams.away.name,
+            escudo1: item.teams.home.logo,
+            escudo2: item.teams.away.logo,
+            horario: "AO VIVO",
+            campeonato: item.league.name,
+            placar: `${item.goals.home ?? 0} - ${item.goals.away ?? 0}`,
+            status: item.fixture.status.short,
+            canal: ""
+          }));
+          res.setHeader('Content-Type', 'application/json');
+          return res.status(200).json(jogosFormatados);
+        }
 
-        // 2. Se houver jogos dos seus campeonatos hoje, mostra só eles.
-        // Se não houver nenhum hoje (retornaria []), mostra os primeiros 25 jogos do dia para o app não dar erro.
-        const listaFinal = jogosFiltrados.length > 0 ? jogosFiltrados : lista.slice(0, 25);
-
+        // Se vier vazio, mostra o motivo exato retornado pela API-Football
         res.setHeader('Content-Type', 'application/json');
-        res.status(200).json(formatarJogos(listaFinal));
+        res.status(200).json(json);
       } catch (e) {
-        res.status(500).json({ error: "Erro ao formatar jogos", detalhe: e.message });
+        res.status(500).json({ error: e.message });
       }
     });
   });
