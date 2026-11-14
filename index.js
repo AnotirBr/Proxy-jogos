@@ -6,7 +6,6 @@ const app = express();
 app.use(cors());
 
 app.get('/', (req, res) => {
-  // Calcula a data de hoje (AAAA-MM-DD) no horário de Brasília
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
   const options = {
@@ -25,8 +24,41 @@ app.get('/', (req, res) => {
       data += chunk;
     });
     apiRes.on('end', () => {
-      res.setHeader('Content-Type', 'application/json');
-      res.status(apiRes.statusCode).send(data);
+      try {
+        const json = JSON.parse(data);
+        const lista = json.response || [];
+
+        // Transforma os dados da API para o formato limpo que o aplicativo entende
+        const jogosFormatados = lista.map((item) => {
+          const dataJogo = new Date(item.fixture.date);
+          const horario = dataJogo.toLocaleTimeString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+
+          const golsCasa = item.goals.home !== null ? item.goals.home : '';
+          const golsFora = item.goals.away !== null ? item.goals.away : '';
+          const placar = (golsCasa !== '' && golsFora !== '') ? `${golsCasa} - ${golsFora}` : '';
+
+          return {
+            time1: item.teams.home.name,
+            time2: item.teams.away.name,
+            escudo1: item.teams.home.logo,
+            escudo2: item.teams.away.logo,
+            horario: horario,
+            campeonato: item.league.name,
+            placar: placar,
+            status: item.fixture.status.short,
+            canal: ""
+          };
+        });
+
+        res.setHeader('Content-Type', 'application/json');
+        res.status(200).json(jogosFormatados);
+      } catch (e) {
+        res.status(500).json({ error: "Erro ao formatar jogos", detalhe: e.message });
+      }
     });
   });
 
