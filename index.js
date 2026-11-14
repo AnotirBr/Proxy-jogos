@@ -6,17 +6,15 @@ const app = express();
 app.use(cors());
 
 app.get('/', (req, res) => {
-  // Calcula a data de hoje automaticamente no fuso de Brasília
-  const hoje = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }))
-    .toISOString()
-    .split("T")[0];
+  // Calcula a data de hoje (AAAA-MM-DD) no horário de Brasília
+  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
   const options = {
     hostname: 'v3.football.api-sports.io',
     path: `/fixtures?date=${hoje}&timezone=America/Sao_Paulo`,
     method: 'GET',
     headers: {
-      'x-apisports-key': 'SUA_CHAVE_API_FOOTBALL_AQUI',
+      'x-apisports-key': '00397071439f1c71b5eeeccab11ffb0c',
       'Accept': 'application/json'
     }
   };
