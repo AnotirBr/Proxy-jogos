@@ -5,55 +5,22 @@ const app = express();
 
 app.use(cors());
 
-// IDs oficiais na API-Football (v3) para os campeonatos escolhidos:
-const LIGAS_PRIORITARIAS = [
-  13,  // CONMEBOL Libertadores
-  11,  // CONMEBOL Sul-Americana
-  73,  // Copa do Brasil
-  2,   // UEFA Champions League
-  39,  // Premier League (Inglaterra)
-  140, // La Liga (Espanhol)
-  135, // Serie A (Italiano)
-  // Seleções (Copa do Mundo, Euro, Nations League, Copa América, Amistosos e Eliminatórias):
-  1, 4, 5, 9, 10, 29, 30, 31, 32, 33, 34, 37, 960
-];
-
-function formatarJogos(lista) {
-  return lista.map((item) => {
-    const dataJogo = new Date(item.fixture.date);
-    const horario = dataJogo.toLocaleTimeString('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    const golsCasa = item.goals.home !== null ? item.goals.home : '';
-    const golsFora = item.goals.away !== null ? item.goals.away : '';
-    const placar = (golsCasa !== '' && golsFora !== '') ? `${golsCasa} - ${golsFora}` : '';
-
-    return {
-      time1: item.teams.home.name,
-      time2: item.teams.away.name,
-      escudo1: item.teams.home.logo,
-      escudo2: item.teams.away.logo,
-      horario: horario,
-      campeonato: item.league.name,
-      placar: placar,
-      status: item.fixture.status.short,
-      canal: ""
-    };
-  });
-}
-
 app.get('/', (req, res) => {
-  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  // Calcula a data de hoje e de daqui a 3 dias para garantir que sempre tenha jogos na lista
+  const hoje = new Date();
+  const futuro = new Date();
+  futuro.setDate(hoje.getDate() + 3);
+
+  const dateFrom = hoje.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const dateTo = futuro.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
   const options = {
-    hostname: 'v3.football.api-sports.io',
-    path: `/fixtures?date=${hoje}&timezone=America/Sao_Paulo`,
+    hostname: 'api.football-data.org',
+    path: `/v4/matches?competitions=PL,ELC,BL1,SA,PD,FL1,DED,PPL,BSA,CL,EC,WC&dateFrom=${dateFrom}&dateTo=${dateTo}`,
     method: 'GET',
     headers: {
-      'x-apisports-key': '1da11c52117664f574b848e1a431542e',
+      'X-Auth-Token': '1da11c52117664f574b848e1a431542e',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FootballProxy/1.0',
       'Accept': 'application/json'
     }
   };
@@ -66,18 +33,38 @@ app.get('/', (req, res) => {
     apiRes.on('end', () => {
       try {
         const json = JSON.parse(data);
-        const lista = json.response || [];
+        const lista = json.matches || [];
 
-        // Filtra os campeonatos desejados; se não houver nenhum hoje, pega os primeiros 30 do dia
-        const jogosFiltrados = lista.filter((item) =>
-          LIGAS_PRIORITARIAS.includes(item.league.id)
-        );
-        const listaFinal = jogosFiltrados.length > 0 ? jogosFiltrados : lista.slice(0, 30);
+        // Traduz para o formato exato que o seu aplicativo entende
+        const jogosFormatados = lista.map((item) => {
+          const dataJogo = new Date(item.utcDate);
+          const horario = dataJogo.toLocaleTimeString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+
+          const golsCasa = item.score?.fullTime?.home;
+          const golsFora = item.score?.fullTime?.away;
+          const placar = (golsCasa !== null && golsFora !== null) ? `${golsCasa} - ${golsFora}` : '';
+
+          return {
+            time1: item.homeTeam.shortName || item.homeTeam.name,
+            time2: item.awayTeam.shortName || item.awayTeam.name,
+            escudo1: item.homeTeam.crest,
+            escudo2: item.awayTeam.crest,
+            horario: horario,
+            campeonato: item.competition.name,
+            placar: placar,
+            status: item.status,
+            canal: ""
+          };
+        });
 
         res.setHeader('Content-Type', 'application/json');
-        res.status(200).json(formatarJogos(listaFinal));
+        res.status(200).json(jogosFormatados);
       } catch (e) {
-        res.status(500).json({ error: "Erro ao formatar jogos", detalhe: e.message });
+        res.status(500).json({ error: "Erro ao processar resposta", detalhe: e.message });
       }
     });
   });
